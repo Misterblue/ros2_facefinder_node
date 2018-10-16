@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import queue
 import threading
 import time
@@ -19,6 +20,8 @@ import sys
 
 import rclpy
 from rclpy.node import Node
+from rclpy.parameter import Parameter
+from sensor_msgs.msg import Image
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Int32MultiArray
 
@@ -30,6 +33,10 @@ class ROS2_facefinder_node(Node):
     def __init__(self):
         super().__init__('ros2_facefinder_node', namespace='raspicam')
 
+        self.param_image_input_topic = self.get_parameter_or('image_input_topic', 'raspicam_compressed')
+        self.param_image_compressed = self.get_parameter_or('image_compressed', True)
+        self.param_face_output_topic = self.get_parameter_or('face_output_topic', 'found_faces')
+
         self.initialize_face_recognizer()
         self.initialize_image_subscriber()
         self.initialize_bounding_box_publisher()
@@ -37,8 +44,6 @@ class ROS2_facefinder_node(Node):
 
     def destroy_node(self):
         # overlay Node function called when class is being stopped and camera needs closing
-        # if hasattr(self, 'compressed_publisher') and self.compressed_publisher != None:
-        #     # nothing to do
         super().destroy_node()
 
     def initialize_face_recognizer(self):
@@ -48,12 +53,16 @@ class ROS2_facefinder_node(Node):
 
     def initialize_image_subscriber(self):
         # Setup subscription for incoming images
-        self.receiver = self.create_subscription(
-                        CompressedImage, 'raspicam_compressed', self.receive_image)
+        if self.param_image_compressed:
+            self.receiver = self.create_subscription(
+                        CompressedImage, self.param_image_input_topic, self.receive_image)
+        else:
+            self.receiver = self.create_subscription(
+                        Image, self.param_image_input_topic, self.receive_image)
         self.frame_num = 0
 
     def initialize_bounding_box_publisher(self):
-        self.bounding_box_publisher = self.create_publisher(Int32MultiArray, 'found_faces')
+        self.bounding_box_publisher = self.create_publisher(Int32MultiArray, self.param_face_output_topic)
 
     def initialize_processing_queue(self):
         # Create a queue and a thread that processes messages in the queue
@@ -89,14 +98,24 @@ class ROS2_facefinder_node(Node):
                 msg = self.image_queue.get(block=True, timeout=2)
             except queue.Empty:
                 msg = None
-
             if self.processor_event.is_set():
                 break
             if msg != None:
                 self.get_logger().debug('FFinder: process_image frame=%s, dataLen=%s'
                                     % (msg.header.frame_id, len(msg.data)) )
-                img = self.convert_image(msg.data)
-                if img != None:
+                # as of 20181016, the msg.data is returned as a list of ints. Convert to bytearray.
+                converted_data = []
+                with CodeTimer(self.get_logger().debug, 'convert to byte array'):
+                    converted_data = bytearray(msg.data)
+
+                # prepare the image and make suitable for face finding
+                if self.param_image_compressed:
+                    img = self.convert_image(converted_data)
+                else:
+                    img = converted_data
+
+                # if there is a good image, find any faces
+                if type(img) != type(None):
                     face_bounding_boxes = self.find_faces(img)
                     self.publish_bounding_boxes(face_bounding_boxes)
 
@@ -104,12 +123,13 @@ class ROS2_facefinder_node(Node):
         # convert the passed buffer into a proper Python image
         img = None
         try:
-            # imagio.imread returns a numpy array where img[h][w] => [r, g, b]
+            # imageio.imread returns a numpy array where img[h][w] => [r, g, b]
             with CodeTimer(self.get_logger().debug, 'decompress image'):
                 img = imageio.imread(io.BytesIO(raw_img))
             self.get_logger().debug('FFinder: imread image: h=%s, w=%s' % (len(img), len(img[0])))
-        except:
-            self.get_logger().error('FFinder: exception uncompressing image')
+        except Exception as e:
+            self.get_logger().error('FFinder: exception uncompressing image. %s: %s'
+                            % (type(e), e.args) )
             img = None
         return img
 
@@ -127,6 +147,16 @@ class ROS2_facefinder_node(Node):
     def publish_bounding_boxes(self, bbs):
         # given a list of bounding boxes, publish same
         return
+
+    def get_parameter_or(self, param, default):
+        # Helper function to return value of a parameter or a default if not set
+        ret = None
+        param_desc = self.get_parameter(param)
+        if param_desc.type_== Parameter.Type.NOT_SET:
+            ret = default
+        else:
+            ret = param_desc.value
+        return ret
 
 class CodeTimer:
     # A little helper class for timing blocks of code
