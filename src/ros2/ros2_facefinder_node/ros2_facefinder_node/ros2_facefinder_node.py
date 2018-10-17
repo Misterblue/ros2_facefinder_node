@@ -24,6 +24,7 @@ from rclpy.parameter import Parameter
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import MultiArrayDimension
 
 import dlib
 import imageio
@@ -109,23 +110,25 @@ class ROS2_facefinder_node(Node):
                     converted_data = bytearray(msg.data)
 
                 # prepare the image and make suitable for face finding
-                if self.param_image_compressed:
-                    img = self.convert_image(converted_data)
-                else:
-                    img = converted_data
+                img = self.convert_image(converted_data)
 
                 # if there is a good image, find any faces
                 if type(img) != type(None):
                     face_bounding_boxes = self.find_faces(img)
-                    self.publish_bounding_boxes(face_bounding_boxes)
+                    self.publish_bounding_boxes(face_bounding_boxes,
+                                img.meta['width'], img.meta['height'])
 
     def convert_image(self, raw_img):
-        # convert the passed buffer into a proper Python image
+        # Convert the passed buffer into a proper Python image. I.e., use imageio
+        #    to do any uncompression, etc.
+        # TODO: add any logic needed to prepare either compressed or uncompressed images.
         img = None
         try:
             # imageio.imread returns a numpy array where img[h][w] => [r, g, b]
             with CodeTimer(self.get_logger().debug, 'decompress image'):
                 img = imageio.imread(io.BytesIO(raw_img))
+                img.meta['width'] = len(img[0])
+                img.meta['height'] = len(img)
             self.get_logger().debug('FFinder: imread image: h=%s, w=%s' % (len(img), len(img[0])))
         except Exception as e:
             self.get_logger().error('FFinder: exception uncompressing image. %s: %s'
@@ -144,8 +147,31 @@ class ROS2_facefinder_node(Node):
                         (i, d.left(), d.top(), d.right(), d.bottom()) )
         return detected
 
-    def publish_bounding_boxes(self, bbs):
-        # given a list of bounding boxes, publish same
+    def publish_bounding_boxes(self, bbs, image_width, image_height):
+        # Given a list of bounding boxes, publish same.
+        # The detector returns an array of dlib.rectangle's.
+        if len(bbs) > 0:
+            msg = Int32MultiArray()
+            msg.layout.data_offset = 0
+            msg.layout.dim.append(
+                MultiArrayDimension(label='height', size=len(bbs) + 1, stride=4 * (len(bbs) +1) ))
+            msg.layout.dim.append(
+                MultiArrayDimension(label='width', size=4, stride=4) )
+            msg.layout.dim.append(
+                MultiArrayDimension(label='channel', size=1, stride=1) )
+            data = []
+            # The first entry is the size of the source image
+            data.append(0)
+            data.append(0)
+            data.append(image_width)
+            data.append(image_height)
+            for rect in bbs:
+                data.append(rect.left())
+                data.append(rect.top())
+                data.append(rect.right())
+                data.append(rect.bottom())
+            msg.data = data
+            self.bounding_box_publisher.publish(msg)
         return
 
     def get_parameter_or(self, param, default):
