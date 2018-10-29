@@ -34,7 +34,7 @@ class ROS2_facefinder_node(Node):
     def __init__(self):
         super().__init__('ros2_facefinder_node', namespace='raspicam')
 
-        self.param_image_input_topic = self.get_parameter_or('image_input_topic', 'raspicam_compressed')
+        self.param_image_input_topic = self.get_parameter_or('image_input_topic', '/raspicam/raspicam_compressed')
         self.param_image_compressed = self.get_parameter_or('image_compressed', True)
         self.param_face_output_topic = self.get_parameter_or('face_output_topic', 'found_faces')
 
@@ -44,16 +44,16 @@ class ROS2_facefinder_node(Node):
         self.initialize_processing_queue()
 
     def destroy_node(self):
-        # overlay Node function called when class is being stopped and camera needs closing
+        # overlay Node function called when class is being stopped
         super().destroy_node()
 
     def initialize_face_recognizer(self):
-        # Get  the detector that will be used herein
-        # Will eventually add face recognizer but this is a start
+        # Get  the detector that will be used herein.
+        # Will eventually add face recognizer but this is a start.
         self.detector = dlib.get_frontal_face_detector()
 
     def initialize_image_subscriber(self):
-        # Setup subscription for incoming images
+        # Setup subscription for incoming images.
         if self.param_image_compressed:
             self.receiver = self.create_subscription(
                         CompressedImage, self.param_image_input_topic, self.receive_image)
@@ -86,12 +86,14 @@ class ROS2_facefinder_node(Node):
             self.processor.join()
 
     def receive_image(self, msg):
+        # Called to process message received by subscription. Queue the message.
         if msg != None and hasattr(msg, 'data'):
             self.get_logger().debug(F"FFinder: receive_image. dataLen={len(msg.data)}")
             self.image_queue.put(msg)
 
     def process_images(self):
-        # Take images from the queue and find the faces therein
+        # Take images from the queue and find the faces therein.
+        # This runs on its own thread so as not to block reception.
         while True:
             if self.processor_event.is_set():
                 break
@@ -101,7 +103,7 @@ class ROS2_facefinder_node(Node):
                 msg = None
             if self.processor_event.is_set():
                 break
-            if msg != None:
+            if type(msg) != type(None):
                 self.get_logger().debug('FFinder: process_image frame=%s, dataLen=%s'
                                     % (msg.header.frame_id, len(msg.data)) )
                 # as of 20181016, the msg.data is returned as a list of ints. Convert to bytearray.
@@ -121,6 +123,8 @@ class ROS2_facefinder_node(Node):
     def convert_image(self, raw_img):
         # Convert the passed buffer into a proper Python image. I.e., use imageio
         #    to do any uncompression, etc.
+        # Note that the returned array is a subclass of numpy.array that includes a
+        #    '.meta' dictionary which returns 'height' and 'width' of the converted image.
         # TODO: add any logic needed to prepare either compressed or uncompressed images.
         img = None
         try:
@@ -137,8 +141,8 @@ class ROS2_facefinder_node(Node):
         return img
 
     def find_faces(self, img):
-        # Given and image, find the faces therein and return the bounding boxes
-        # Returns an array of 'dlib.rectangle'
+        # Given and image, find the faces therein and return the bounding boxes.
+        # Returns an array of 'dlib.rectangle'.
         with CodeTimer(self.get_logger().debug, 'detect faces'):
             detected = self.detector(img, 0)
         self.get_logger().debug('FFinder: detected %s faces' % (len(detected)))
@@ -156,7 +160,7 @@ class ROS2_facefinder_node(Node):
             msg.layout.dim.append(
                 MultiArrayDimension(label='height', size=len(bbs) + 1, stride=4 * (len(bbs) +1) ))
             msg.layout.dim.append(
-                MultiArrayDimension(label='width', size=4, stride=4) )
+                MultiArrayDimension(label='width', size=4, stride=1) )
             msg.layout.dim.append(
                 MultiArrayDimension(label='channel', size=1, stride=1) )
             data = []
@@ -185,7 +189,11 @@ class ROS2_facefinder_node(Node):
         return ret
 
 class CodeTimer:
-    # A little helper class for timing blocks of code
+    # A little helper class for timing blocks of code.
+    # Use like: with CodeTImer(logger, 'name'):
+                    Do_some_statements
+    # This will call 'logger' after the block of statements is complete with
+    #    a message containing the 'name' and the CPU time used by the statements.
     def __init__(self, logger, name=None):
         self.logger = logger
         self.name = " '"  + name + "'" if name else ''

@@ -34,6 +34,7 @@ setup(
         'setuptools',
         'std_msgs',
         'sensor_msgs',
+        'ros2_adafruit_pwmhat_msgs',
         'dlib',
         'imageio'
     ],

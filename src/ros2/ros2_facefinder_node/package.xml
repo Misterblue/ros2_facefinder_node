@@ -5,7 +5,7 @@
 <package format="2">
   <name>ros2_facefinder_node</name>
   <version>0.1.0</version>
-  <description>ROS2 node for Raspberry Pi 3 camera
+  <description>ROS2 node finding faces in images
   <license>Apache License 2.0</license>
 
   <author email="misterblue@misterblue.com">Robert Adams</author>
@@ -15,6 +15,10 @@
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>ros2_adafruit_pwmhat_msgs</exec_depend>
+  <exec_depend>dlib</exec_depend>
+  <exec_depend>imageio</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
