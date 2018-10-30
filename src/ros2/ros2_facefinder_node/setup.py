@@ -32,8 +32,6 @@ setup(
     ],
     install_requires= [
         'setuptools',
-        'std_msgs',
-        'sensor_msgs',
         'ros2_adafruit_pwmhat_msgs',
         'dlib',
         'imageio'
