@@ -34,9 +34,11 @@ class ROS2_facefinder_node(Node):
     def __init__(self):
         super().__init__('ros2_facefinder_node', namespace='raspicam')
 
-        self.param_image_input_topic = self.get_parameter_or('image_input_topic', '/raspicam/raspicam_compressed')
-        self.param_image_compressed = self.get_parameter_or('image_compressed', True)
-        self.param_face_output_topic = self.get_parameter_or('face_output_topic', 'found_faces')
+        self.set_parameters( [
+            Parameter('image_input_topic', Parameter.Type.STRING, 'raspicam_compressed'),
+            Parameter('image_compressed', Parameter.Type.BOOL, True),
+            Parameter('face_output_topic', Parameter.Type.STRING, 'found_faces')
+            ] )
 
         self.initialize_face_recognizer()
         self.initialize_image_subscriber()
@@ -54,16 +56,19 @@ class ROS2_facefinder_node(Node):
 
     def initialize_image_subscriber(self):
         # Setup subscription for incoming images.
-        if self.param_image_compressed:
+        if self.get_parameter_value('image_compressed'):
             self.receiver = self.create_subscription(
-                        CompressedImage, self.param_image_input_topic, self.receive_image)
+                        CompressedImage, self.get_parameter_value('image_input_topic'),
+                        self.receive_image)
         else:
             self.receiver = self.create_subscription(
-                        Image, self.param_image_input_topic, self.receive_image)
+                        Image, self.get_parameter_value('image_input_topic'),
+                        self.receive_image)
         self.frame_num = 0
 
     def initialize_bounding_box_publisher(self):
-        self.bounding_box_publisher = self.create_publisher(Int32MultiArray, self.param_face_output_topic)
+        self.bounding_box_publisher = self.create_publisher(Int32MultiArray,
+                                        self.get_parameter_value('face_output_topic'))
 
     def initialize_processing_queue(self):
         # Create a queue and a thread that processes messages in the queue
@@ -188,10 +193,20 @@ class ROS2_facefinder_node(Node):
             ret = param_desc.value
         return ret
 
+    def get_parameter_value(self, param):
+        # Helper function to return value of a parameter
+        ret = None
+        param_desc = self.get_parameter(param)
+        if param_desc.type_== Parameter.Type.NOT_SET:
+            raise Exception('Fetch of parameter that does not exist: ' + param)
+        else:
+            ret = param_desc.value
+        return ret
+
 class CodeTimer:
     # A little helper class for timing blocks of code.
     # Use like: with CodeTImer(logger, 'name'):
-                    Do_some_statements
+    #                Do_some_statements
     # This will call 'logger' after the block of statements is complete with
     #    a message containing the 'name' and the CPU time used by the statements.
     def __init__(self, logger, name=None):

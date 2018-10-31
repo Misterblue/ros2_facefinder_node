@@ -32,7 +32,6 @@ setup(
     ],
     install_requires= [
         'setuptools',
-        'ros2_adafruit_pwmhat_msgs',
         'dlib',
         'imageio'
     ],
