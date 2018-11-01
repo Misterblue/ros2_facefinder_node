@@ -150,9 +150,10 @@ class ROS2_facefinder_node(Node):
         # Returns an array of 'dlib.rectangle'.
         with CodeTimer(self.get_logger().debug, 'detect faces'):
             detected = self.detector(img, 0)
-        self.get_logger().debug('FFinder: detected %s faces' % (len(detected)))
-        for i, d in enumerate(detected):
-            self.get_logger().debug("   face %s: Left: %s Top: %s Right: %s Bottom: %s" %
+        if len(detected) > 0:
+            self.get_logger().info('FFinder: detected %s faces' % (len(detected)))
+            for i, d in enumerate(detected):
+                self.get_logger().info("   face %s: Left: %s Top: %s Right: %s Bottom: %s" %
                         (i, d.left(), d.top(), d.right(), d.bottom()) )
         return detected
 
