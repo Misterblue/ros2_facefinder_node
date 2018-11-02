@@ -93,7 +93,7 @@ class ROS2_facefinder_node(Node):
     def receive_image(self, msg):
         # Called to process message received by subscription. Queue the message.
         if msg != None and hasattr(msg, 'data'):
-            self.get_logger().debug(F"FFinder: receive_image. dataLen={len(msg.data)}")
+            self.get_logger().debug('FFinder: receive_image. dataLen=%s' % (len(msg.data)) )
             self.image_queue.put(msg)
 
     def process_images(self):
