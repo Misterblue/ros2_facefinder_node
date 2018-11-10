@@ -34,10 +34,10 @@ class ROS2_facefinder_node(Node):
     def __init__(self):
         super().__init__('ros2_facefinder_node', namespace='raspicam')
 
-        self.set_parameters( [
-            Parameter('image_input_topic', Parameter.Type.STRING, 'raspicam_compressed'),
-            Parameter('image_compressed', Parameter.Type.BOOL, True),
-            Parameter('face_output_topic', Parameter.Type.STRING, 'found_faces')
+        self.set_parameter_defaults( [
+            ('image_input_topic', Parameter.Type.STRING, 'raspicam_compressed'),
+            ('image_compressed', Parameter.Type.BOOL, True),
+            ('face_output_topic', Parameter.Type.STRING, 'found_faces')
             ] )
 
         self.initialize_face_recognizer()
@@ -203,6 +203,28 @@ class ROS2_facefinder_node(Node):
         else:
             ret = param_desc.value
         return ret
+
+    def set_parameter_defaults(self, params):
+        # If a parameter has not been set externally, set the value to a default.
+        # Passed a list of "(parameterName, parameterType, defaultValue)" tuples.
+        parameters_to_set = []
+        for (pparam, ptype, pdefault) in params:
+            if not self.has_parameter(pparam):
+                parameters_to_set.append( Parameter(pparam, ptype, pdefault) )
+        if len(parameters_to_set) > 0:
+            self.set_parameters(parameters_to_set)
+
+    def parameter_set_if_set(self, param, set_function):
+        # If there is a parameter set, do set_function with the value
+        if self.has_parameter(param):
+            set_function(self.get_parameter_value(param))
+
+    def has_parameter(self, param):
+        # Return 'True' if a parameter by that name is specified
+        param_desc = self.get_parameter(param)
+        if param_desc.type_== Parameter.Type.NOT_SET:
+            return False
+        return True
 
 class CodeTimer:
     # A little helper class for timing blocks of code.
